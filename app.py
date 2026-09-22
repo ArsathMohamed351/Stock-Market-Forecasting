@@ -14,13 +14,13 @@ from keras.layers import LSTM, Dense, Dropout, Input, LayerNormalization, MultiH
 
 # PAGE CONFIG
 
-st.set_page_config(page_title="📊 MegaStock AI Pro Dashboard", layout="wide")
-st.title("📊 MegaStock AI – Pro Dashboard 🚀")
+st.set_page_config(page_title="MegaStock AI Pro Dashboard", layout="wide")
+st.title("MegaStock AI – Pro Dashboard ")
 
 
 # SIDEBAR CONTROLS
 
-st.sidebar.header("⚙️ Controls")
+st.sidebar.header(" Controls")
 
 STOCKS = [
     'AAPL','MSFT','AMZN','GOOG','TSLA','META','NVDA','NFLX','BABA','INTC',
@@ -94,7 +94,7 @@ if latest > ma50 > ma200:
 elif latest < ma50 < ma200:
     trend = "📉 Bearish"
 else:
-    trend = "➖ Sideways"
+    trend = "Sideways"
 c4.metric("Market Trend", trend)
 
 # Support & Resistance
@@ -149,7 +149,7 @@ def build_transformer_model():
     return model
 
 
-# MODEL TRAINING / LOADING
+# MODEL TRAINING
 
 lstm_model_path = Path(f"{symbol}_lstm.keras")
 transformer_model_path = Path(f"{symbol}_transformer.keras")
@@ -191,6 +191,8 @@ pred_test_trans = transformer_model.predict(X_test, verbose=0)
 rmse_lstm = np.sqrt(mean_squared_error(y_test, pred_test_lstm))
 rmse_trans = np.sqrt(mean_squared_error(y_test, pred_test_trans))
 
+
+
 # Confidence weights inversely proportional to RMSE
 w_lstm = 1 / (rmse_lstm + 1e-6)
 w_trans = 1 / (rmse_trans + 1e-6)
@@ -203,7 +205,7 @@ future_price_combined = scaler.inverse_transform(future_combined)
 
 future_dates = pd.date_range(start=data['Date'].iloc[-1] + pd.Timedelta(days=1), periods=future_days, freq='B')
 
-st.subheader("🔮 AI Weighted Future Forecast")
+st.subheader("AI Weighted Future Forecast")
 fig, ax = plt.subplots(figsize=(12,5))
 ax.plot(data['Date'], data['Close'], label="Historical")
 ax.plot(future_dates, future_price_combined, label="AI Forecast (Weighted)", color='orange')
@@ -222,7 +224,7 @@ sharpe = (returns.mean() / returns.std()) * np.sqrt(252)
 cum = (1 + returns).cumprod()
 drawdown = cum / cum.cummax() - 1
 
-st.subheader("⚠️ Risk Metrics")
+st.subheader("Risk Metrics")
 r1, r2 = st.columns(2)
 r1.metric("Sharpe Ratio", f"{sharpe:.2f}")
 r2.metric("Max Drawdown", f"{drawdown.min()*100:.2f}%")
@@ -230,7 +232,7 @@ r2.metric("Max Drawdown", f"{drawdown.min()*100:.2f}%")
 
 # TECHNICAL INDICATORS
 
-st.subheader("📊 MACD Indicator")
+st.subheader("MACD Indicator")
 ema12 = data['Close'].ewm(span=12).mean()
 ema26 = data['Close'].ewm(span=26).mean()
 macd = ema12 - ema26
@@ -242,7 +244,7 @@ ax2.axhline(0, linestyle="--", alpha=0.5)
 ax2.legend()
 st.pyplot(fig2)
 
-st.subheader("📐 Fibonacci Retracement")
+st.subheader("Fibonacci Retracement")
 high, low = data['Close'].max(), data['Close'].min()
 levels = [0.236, 0.382, 0.5, 0.618]
 fig3, ax3 = plt.subplots(figsize=(12,5))
@@ -281,7 +283,7 @@ if confidence > 65: score += 1; reasons.append("AI confidence strong")
 
 verdict = "🟢 STRONG BUY" if score >= 5 else "🟡 BUY" if score == 4 else "⏸ WAIT" if score == 3 else "🔴 AVOID" if score == 2 else "❌ STRONG SELL"
 
-st.subheader("🧠 AI Trade Suggestion")
+st.subheader("AI Trade Suggestion")
 st.markdown(f"""
 ### **{verdict}**
 **Mode:** {trade_mode}  
@@ -300,14 +302,14 @@ tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
 atr = tr.rolling(14).mean().iloc[-1]
 sl, tp = tf_price - atr, tf_price + atr*2
 
-st.subheader("📐 AI Risk Levels")
+st.subheader("AI Risk Levels")
 st.write(f"ATR: **{atr:.2f}**")
 st.write(f"Suggested Stop-Loss: **${sl:.2f}**")
 st.write(f"Suggested Target: **${tp:.2f}**")
 
 # POSITION SIZING
 
-st.subheader("⚖️ Position Sizing")
+st.subheader("Position Sizing")
 capital = st.number_input("Total Capital ($)", value=10000)
 risk_pct = st.slider("Risk per Trade (%)", 0.5, 5.0, 1.0)
 risk_amount = capital * (risk_pct / 100)
@@ -317,5 +319,6 @@ st.write(f"Position Size: **{int(position_size)} shares**")
 
 
 # DATA TABLE
-st.subheader("📄 Latest Stock Data")
+
+st.subheader("Latest Stock Data")
 st.dataframe(data.tail(50))

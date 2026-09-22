@@ -1,0 +1,11 @@
+First Run : Notebook.py
+then Go to app.py
+
+run Both
+
+cd "C:\Users\Arsath Mohamed\Desktop\Mini-project"
+
+dir
+
+
+streamlit run app.py   

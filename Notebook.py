@@ -126,16 +126,50 @@ for symbol in selected_stocks:
         transformer_model.fit(X_train, y_train, epochs=30, batch_size=32, verbose=0)
         transformer_model.save(transformer_model_path)
 
-    # Predict future
-    def predict_future(model, scaled_data, days):
-        seq = scaled_data[-LOOKBACK:].reshape(1,LOOKBACK,1)
-        future_scaled=[]
-        for _ in range(days):
-            p = model.predict(seq, verbose=0)[0,0]
-            future_scaled.append(p)
-            seq = np.append(seq[:,1:,:], [[[p]]], axis=1)
-        return np.array(future_scaled).reshape(-1,1)
+# =========================================================
+# FUTURE PREDICTION FUNCTION
+# =========================================================
 
+def predict_future(model, scaled_data, days):
+
+    # Get last LOOKBACK rows
+    seq = scaled_data[-LOOKBACK:]
+
+    # Reshape for deep learning
+    seq = seq.reshape(
+        1,
+        LOOKBACK,
+        scaled_data.shape[1]
+    )
+
+    future_predictions = []
+
+    for _ in range(days):
+
+        # Predict next close price
+        pred = model.predict(
+            seq,
+            verbose=0
+        )[0,0]
+
+        future_predictions.append(pred)
+
+        # Copy last row
+        next_row = seq[0, -1].copy()
+
+        # Replace CLOSE column
+        # Close index = 3
+        next_row[3] = pred
+
+        # Add next timestep
+        seq = np.append(
+            seq[:,1:,:],
+            [[next_row]],
+            axis=1
+        )
+
+    return np.array(future_predictions)
+    
     future_lstm = predict_future(lstm_model, scaled, future_days)
     future_trans = predict_future(transformer_model, scaled, future_days)
 

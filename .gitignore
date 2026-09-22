@@ -9,15 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-venv/
 __pycache__/
 *.keras
 *.pdf
 *.log
-*.toml
 
 Conference/
 
 Journal/
 
 Photo/
+
+Report/
