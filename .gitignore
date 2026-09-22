@@ -1,19 +1,28 @@
 # Python-generated files
 __pycache__/
-*.py[oc]
+*.py[cod]
+
+# Build / distribution
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
 # Virtual environments
-.venv
+.venv/
+venv/
 
-__pycache__/
+# Model files
 *.keras
-*.pdf
+
+# Logs
 *.log
 
+# PDFs
+*.pdf
+*.txt
+
+# Project documentation / folders
 Conference/
 
 Journal/
