@@ -42,7 +42,6 @@ LOOKBACK = 60
 
 # MODEL FUNCTIONS
 
-@st.cache_resource
 def build_lstm_model():
     model = Sequential([
         LSTM(64, return_sequences=True, input_shape=(LOOKBACK,1)),
@@ -54,7 +53,6 @@ def build_lstm_model():
     model.compile(optimizer="adam", loss="mse")
     return model
 
-@st.cache_resource
 def build_transformer_model():
     input_layer = Input(shape=(LOOKBACK, 1))
     x = LayerNormalization()(input_layer)
@@ -72,6 +70,8 @@ def load_data(sym, start, end):
     df.reset_index(inplace=True)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
+    if "Datetime" in df.columns and "Date" not in df.columns:
+        df.rename(columns={"Datetime": "Date"}, inplace=True)
     return df
 
 @st.cache_data
@@ -80,20 +80,46 @@ def load_intraday(sym, interval):
     df.reset_index(inplace=True)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
+    if "Datetime" in df.columns and "Date" not in df.columns:
+        df.rename(columns={"Datetime": "Date"}, inplace=True)
     return df
+
+def predict_future(model, scaled_data, days):
+    sequence = scaled_data[-LOOKBACK:].reshape(1, LOOKBACK, 1)
+    predictions = []
+    for _ in range(days):
+        prediction = float(model.predict(sequence, verbose=0)[0, 0])
+        predictions.append(prediction)
+        sequence = np.concatenate(
+            [sequence[:, 1:, :], np.array([[[prediction]]], dtype=sequence.dtype)],
+            axis=1,
+        )
+    return np.asarray(predictions, dtype=float).reshape(-1, 1)
 
 # TOP SECTION: Live Metrics + AI Weighted Forecast + ATR Risk (per stock)
 
+if start_date >= end_date:
+    st.error("Start Date must be earlier than End Date.")
+    st.stop()
+if not selected_stocks:
+    st.info("Select at least one stock to build the dashboard.")
+    st.stop()
+
 portfolio_summary = []
 portfolio_risk_data = {}
+successful_symbols = []
 
 for symbol in selected_stocks:
     # Load data
     data = load_data(symbol, start_date, end_date)
     idata = data if trade_mode=="Investment (Daily)" else load_intraday(symbol, intraday_interval)
-    if data.empty or len(data) < LOOKBACK + 20:
-        st.warning(f"Not enough data for {symbol}")
+    if data.empty or len(data) < LOOKBACK + 20 or "Close" not in data.columns:
+        st.warning(f"Not enough historical data for {symbol}")
         continue
+    if idata.empty or len(idata) < 20 or not {"High", "Low", "Close", "Date"}.issubset(idata.columns):
+        st.warning(f"Not enough intraday data for {symbol} to calculate indicators")
+        continue
+    successful_symbols.append(symbol)
 
     # Scale data
     scaler = MinMaxScaler()
@@ -126,50 +152,6 @@ for symbol in selected_stocks:
         transformer_model.fit(X_train, y_train, epochs=30, batch_size=32, verbose=0)
         transformer_model.save(transformer_model_path)
 
-# =========================================================
-# FUTURE PREDICTION FUNCTION
-# =========================================================
-
-def predict_future(model, scaled_data, days):
-
-    # Get last LOOKBACK rows
-    seq = scaled_data[-LOOKBACK:]
-
-    # Reshape for deep learning
-    seq = seq.reshape(
-        1,
-        LOOKBACK,
-        scaled_data.shape[1]
-    )
-
-    future_predictions = []
-
-    for _ in range(days):
-
-        # Predict next close price
-        pred = model.predict(
-            seq,
-            verbose=0
-        )[0,0]
-
-        future_predictions.append(pred)
-
-        # Copy last row
-        next_row = seq[0, -1].copy()
-
-        # Replace CLOSE column
-        # Close index = 3
-        next_row[3] = pred
-
-        # Add next timestep
-        seq = np.append(
-            seq[:,1:,:],
-            [[next_row]],
-            axis=1
-        )
-
-    return np.array(future_predictions)
-    
     future_lstm = predict_future(lstm_model, scaled, future_days)
     future_trans = predict_future(transformer_model, scaled, future_days)
 
@@ -263,17 +245,22 @@ st.subheader("📊 Multi-Stock AI Portfolio Summary")
 st.dataframe(pd.DataFrame(portfolio_summary), use_container_width=True)
 
 st.subheader("📉 Portfolio Drawdown Heatmap")
-drawdown_matrix = []
-for symbol in selected_stocks:
-    data = load_data(symbol, start_date, end_date)
-    returns = data['Close'].pct_change().dropna()
-    cum = (1+returns).cumprod()
-    dd = cum/cum.cummax()-1
-    drawdown_matrix.append(dd.values[-len(dd):])
-drawdown_df = pd.DataFrame(drawdown_matrix, index=selected_stocks).T
-fig, ax = plt.subplots(figsize=(12,6))
-sns.heatmap(drawdown_df, cmap="Reds", cbar_kws={'label':'Drawdown'}, ax=ax)
-st.pyplot(fig)
+drawdowns = {}
+for symbol in successful_symbols:
+    stock_data = load_data(symbol, start_date, end_date)
+    if stock_data.empty or "Close" not in stock_data.columns:
+        continue
+    stock_returns = stock_data["Close"].pct_change().dropna()
+    cumulative_returns = (1 + stock_returns).cumprod()
+    drawdowns[symbol] = cumulative_returns / cumulative_returns.cummax() - 1
+
+if drawdowns:
+    drawdown_df = pd.concat(drawdowns, axis=1)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.heatmap(drawdown_df, cmap="Reds", cbar_kws={"label": "Drawdown"}, ax=ax)
+    st.pyplot(fig)
+else:
+    st.info("No valid historical data is available for the drawdown heatmap.")
 
 st.subheader("📊 Portfolio ATR Risk Management Graph (All Stocks)")
 fig, ax = plt.subplots(figsize=(14,6))
@@ -284,14 +271,19 @@ for symbol, df in portfolio_risk_data.items():
     ax.fill_between(df['Date'], df['SL'], df['TP'], alpha=0.1)
 ax.set_title("Portfolio ATR Risk Levels")
 ax.set_ylabel("Price ($)")
-ax.legend()
-st.pyplot(fig)
+if portfolio_risk_data:
+    ax.legend()
+    st.pyplot(fig)
+else:
+    st.info("No valid data is available for portfolio ATR risk levels.")
 
 # BOTTOM SECTION: Technical Indicators (optional)
 
 st.subheader("📊 Technical Indicators (Reference / Optional)")
-for symbol in selected_stocks:
+for symbol in successful_symbols:
     data = load_data(symbol, start_date, end_date)
+    if data.empty or "Close" not in data.columns:
+        continue
     st.markdown(f"### {symbol} MACD")
     ema12 = data['Close'].ewm(span=12).mean()
     ema26 = data['Close'].ewm(span=26).mean()
